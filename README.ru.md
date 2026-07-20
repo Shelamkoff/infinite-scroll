@@ -11,6 +11,7 @@
 
 - Без обработчика события `scroll`
 - Только одна активная загрузка
+- Sentinel автоматически переносится после добавленного контента
 - Настраиваемое расстояние предварительной загрузки
 - Пауза и возобновление
 - Обработка ошибок callback
@@ -42,9 +43,17 @@ const infiniteScroll = new InfiniteScroll(feed, async () => {
 })
 ```
 
-Пока callback выполняется, повторные пересечения игнорируются. После его
-завершения наблюдатель обновляется, поэтому следующая загрузка сработает, даже
-если sentinel всё ещё находится во viewport.
+Пока callback выполняется, повторные пересечения игнорируются. На одно
+пересечение observer приходится один callback, поэтому видимый sentinel не
+создаёт бесконечный цикл запросов. Верните `false`, когда список закончился:
+
+```js
+const infiniteScroll = new InfiniteScroll(feed, async () => {
+  const page = await fetchNextPage()
+  appendItems(feed, page.items)
+  return page.hasMore
+})
+```
 
 ## API
 
@@ -61,6 +70,9 @@ const infiniteScroll = new InfiniteScroll(feed, async () => {
 ### `setLoading(value)`
 
 `true` ставит загрузку на паузу, `false` возобновляет её.
+
+Возврат `false` из load callback использует то же состояние паузы. Вызывайте
+`setLoading(false)` только если позже появились новые данные.
 
 ### `updateSentinelPosition(top)`
 

@@ -12,9 +12,14 @@ class FakeElement {
   }
 
   appendChild(child) {
+    if (child.parentNode) child.remove()
     child.parentNode = this
     this.children.push(child)
     return child
+  }
+
+  get lastElementChild() {
+    return this.children.at(-1) ?? null
   }
 
   remove() {
@@ -88,13 +93,13 @@ test('creates and observes a configured sentinel', () => {
   assert.deepEqual(observer.observed, [sentinel])
 })
 
-test('guards against concurrent callback runs and refreshes afterward', async () => {
+test('guards against concurrent callback runs without forcing another intersection', async () => {
   let resolveCallback
   let calls = 0
   const pending = new Promise(resolve => {
     resolveCallback = resolve
   })
-  const { observer, sentinel } = setup(async () => {
+  const { observer } = setup(async () => {
     calls += 1
     await pending
   })
@@ -106,8 +111,42 @@ test('guards against concurrent callback runs and refreshes afterward', async ()
 
   resolveCallback()
   await flush()
-  assert.deepEqual(observer.unobserved, [sentinel])
-  assert.equal(observer.observed.length, 2)
+  assert.deepEqual(observer.unobserved, [])
+  assert.equal(observer.observed.length, 1)
+})
+
+test('pauses permanently when the callback reports the end of the list', async () => {
+  let calls = 0
+  const { controller, observer } = setup(() => {
+    calls += 1
+    return false
+  })
+
+  observer.intersect()
+  await flush()
+  observer.intersect()
+  await flush()
+  assert.equal(calls, 1)
+
+  controller.setLoading(false)
+  observer.intersect()
+  await flush()
+  assert.equal(calls, 2)
+})
+
+test('moves the sentinel behind content appended by the callback', async () => {
+  let container
+  const item = new FakeElement()
+  const result = setup(() => {
+    container.appendChild(item)
+  })
+  container = result.container
+
+  result.observer.intersect()
+  await flush()
+
+  assert.deepEqual(container.children, [item, result.sentinel])
+  assert.equal(container.lastElementChild, result.sentinel)
 })
 
 test('pauses and resumes observation without invoking while paused', async () => {
@@ -159,7 +198,11 @@ test('routes callback failures to onError and remains usable', async () => {
   observer.intersect()
   await flush()
   assert.deepEqual(errors, [expected])
-  assert.equal(observer.observed.length, 2)
+  assert.equal(observer.observed.length, 1)
+
+  observer.intersect()
+  await flush()
+  assert.deepEqual(errors, [expected, expected])
 })
 
 test('positions the sentinel and rejects invalid public input', () => {

@@ -81,7 +81,8 @@
   <main>
     <p class="intro">
       Scroll down. New entries are loaded before the sentinel reaches the
-      viewport. Concurrent requests are guarded automatically.
+      viewport. Concurrent requests are guarded automatically, and the demo
+      stops after the final batch.
     </p>
     <section class="feed" id="feed" aria-live="polite"></section>
   </main>
@@ -92,12 +93,14 @@
     const feed = document.querySelector('#feed')
     const status = document.querySelector('#status')
     const toggle = document.querySelector('#toggle')
+    const MAX_ITEMS = 44
     let count = 0
     let paused = false
 
     function appendBatch(size = 8) {
       const fragment = document.createDocumentFragment()
-      for (let index = 0; index < size; index += 1) {
+      const batchSize = Math.min(size, MAX_ITEMS - count)
+      for (let index = 0; index < batchSize; index += 1) {
         count += 1
         const article = document.createElement('article')
         article.className = 'card'
@@ -116,9 +119,17 @@
 
     appendBatch(12)
     const infiniteScroll = new InfiniteScroll(feed, async () => {
+      if (count >= MAX_ITEMS) return false
       status.textContent = 'Loading next batch…'
       await new Promise(resolve => setTimeout(resolve, 450))
       appendBatch()
+      const hasMore = count < MAX_ITEMS
+      if (!hasMore) {
+        status.textContent = `All ${count} items loaded`
+        toggle.textContent = 'Complete'
+        toggle.disabled = true
+      }
+      return hasMore
     }, {
       threshold: 500,
       onError: error => {

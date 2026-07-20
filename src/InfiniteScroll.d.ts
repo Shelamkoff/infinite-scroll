@@ -10,7 +10,7 @@ export interface InfiniteScrollOptions {
 export class InfiniteScroll {
   constructor(
     container: HTMLElement,
-    callback: () => void | Promise<void>,
+    callback: () => boolean | void | Promise<boolean | void>,
     options?: InfiniteScrollOptions,
   )
   updateSentinelPosition(top: number): void

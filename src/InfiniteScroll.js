@@ -6,6 +6,9 @@
  */
 export class InfiniteScroll {
   /** @type {HTMLElement} */
+  #container
+
+  /** @type {HTMLElement} */
   #sentinel
 
   /** @type {IntersectionObserver} */
@@ -20,7 +23,7 @@ export class InfiniteScroll {
   /** @type {boolean} */
   #destroyed = false
 
-  /** @type {() => void | Promise<void>} */
+  /** @type {() => boolean | void | Promise<boolean | void>} */
   #callback
 
   /** @type {((error: unknown) => void) | undefined} */
@@ -28,7 +31,7 @@ export class InfiniteScroll {
 
   /**
    * @param {HTMLElement} container
-   * @param {() => void | Promise<void>} callback
+   * @param {() => boolean | void | Promise<boolean | void>} callback
    * @param {{
    *   threshold?: number,
    *   sentinel?: string,
@@ -70,6 +73,7 @@ export class InfiniteScroll {
 
     this.#callback = callback
     this.#onError = onError
+    this.#container = container
     this.#sentinel = document.createElement('div')
     this.#sentinel.className = sentinel.trim()
     this.#sentinel.setAttribute('aria-hidden', 'true')
@@ -129,7 +133,10 @@ export class InfiniteScroll {
     this.#inFlight = true
 
     try {
-      await this.#callback()
+      const shouldContinue = await this.#callback()
+      if (shouldContinue === false) {
+        this.#paused = true
+      }
     } catch (error) {
       if (this.#onError) {
         this.#onError(error)
@@ -138,8 +145,8 @@ export class InfiniteScroll {
       }
     } finally {
       this.#inFlight = false
-      if (!this.#destroyed && !this.#paused) {
-        this.#refreshObserver()
+      if (!this.#destroyed && this.#container.lastElementChild !== this.#sentinel) {
+        this.#container.appendChild(this.#sentinel)
       }
     }
   }

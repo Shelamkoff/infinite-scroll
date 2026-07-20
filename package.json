@@ -1,6 +1,6 @@
 {
   "name": "@shelamkoff/infinite-scroll",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Small framework-agnostic infinite scroll controller built on IntersectionObserver with loading guards, error handling, and absolute-layout support",
   "type": "module",
   "exports": {

@@ -12,6 +12,7 @@ absolute-positioned layouts.
 
 - No scroll event listener
 - One in-flight load at a time
+- Keeps the generated sentinel after newly appended content
 - Configurable preloading distance
 - Pause and resume control
 - Error callback for failed loads
@@ -44,8 +45,17 @@ const infiniteScroll = new InfiniteScroll(feed, async () => {
 ```
 
 The callback may be synchronous or return a promise. While it is running,
-additional intersections are ignored. After it settles, the observer is
-refreshed so loading can continue even when the sentinel remains visible.
+additional intersections are ignored. One callback is made per observer
+intersection, so a sentinel that remains visible does not create a request
+loop. Return `false` when the end of the list is reached:
+
+```js
+const infiniteScroll = new InfiniteScroll(feed, async () => {
+  const page = await fetchNextPage()
+  appendItems(feed, page.items)
+  return page.hasMore
+})
+```
 
 ## API
 
@@ -67,6 +77,9 @@ Pauses loading when `true` and resumes it when `false`.
 infiniteScroll.setLoading(true)
 infiniteScroll.setLoading(false)
 ```
+
+Returning `false` from the load callback uses the same paused state. Call
+`setLoading(false)` only if new data becomes available later.
 
 ### `updateSentinelPosition(top)`
 
