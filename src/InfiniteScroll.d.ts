@@ -3,6 +3,8 @@ export interface InfiniteScrollOptions {
   threshold?: number
   /** CSS class for the sentinel element. Default: 'infinite-scroll-sentinel'. */
   sentinel?: string
+  /** Receives callback errors. Errors are logged when this handler is omitted. */
+  onError?: (error: unknown) => void
 }
 
 export class InfiniteScroll {
