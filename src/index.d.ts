@@ -1,1 +1,2 @@
-export { InfiniteScroll, InfiniteScrollOptions } from './InfiniteScroll'
+export { InfiniteScroll } from './InfiniteScroll.js'
+export type { InfiniteScrollOptions } from './InfiniteScroll.js'
