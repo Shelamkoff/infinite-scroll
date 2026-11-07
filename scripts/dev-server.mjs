@@ -1,10 +1,10 @@
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
-import { extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = resolve(fileURLToPath(new URL('../', import.meta.url)))
+const root = await realpath(fileURLToPath(new URL('../', import.meta.url)))
 const host = process.env.HOST ?? '127.0.0.1'
 const port = Number.parseInt(process.env.PORT ?? '4173', 10)
 const requestedEntry = process.argv[2] ?? '/demo.html'
@@ -28,10 +28,15 @@ function send(response, status, message) {
   response.end(message)
 }
 
+function isWithinRoot(path) {
+  const fromRoot = relative(root, path)
+  return fromRoot !== '..' && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot)
+}
+
 async function resolveRequestPath(requestUrl) {
-  const url = new URL(requestUrl ?? '/', `http://${host}:${port}`)
   let pathname
   try {
+    const url = new URL(requestUrl ?? '/', 'http://localhost')
     pathname = decodeURIComponent(url.pathname)
   } catch {
     return null
@@ -39,12 +44,18 @@ async function resolveRequestPath(requestUrl) {
 
   if (pathname === '/') pathname = entryPath
   const candidate = resolve(root, `.${pathname}`)
-  const fromRoot = relative(root, candidate)
-  if (fromRoot.startsWith('..') || isAbsolute(fromRoot)) return null
+  if (!isWithinRoot(candidate)) return null
 
   try {
-    const info = await stat(candidate)
-    return info.isDirectory() ? join(candidate, 'index.html') : candidate
+    let filePath = await realpath(candidate)
+    if (!isWithinRoot(filePath)) return null
+    let info = await stat(filePath)
+    if (info.isDirectory()) {
+      filePath = await realpath(join(filePath, 'index.html'))
+      if (!isWithinRoot(filePath)) return null
+      info = await stat(filePath)
+    }
+    return info.isFile() ? filePath : null
   } catch {
     return null
   }
@@ -62,16 +73,26 @@ const server = createServer(async (request, response) => {
     return
   }
 
-  response.writeHead(200, {
+  const headers = {
     'Content-Type': contentTypes.get(extname(filePath).toLowerCase()) ?? 'application/octet-stream',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
-  })
+  }
   if (request.method === 'HEAD') {
+    response.writeHead(200, headers)
     response.end()
     return
   }
-  createReadStream(filePath).pipe(response)
+  const stream = createReadStream(filePath)
+  stream.on('error', () => {
+    if (response.headersSent) response.destroy()
+    else send(response, 404, 'Not found')
+  })
+  response.on('close', () => stream.destroy())
+  stream.on('open', () => {
+    response.writeHead(200, headers)
+    stream.pipe(response)
+  })
 })
 
 server.on('error', error => {
@@ -80,7 +101,8 @@ server.on('error', error => {
 })
 
 server.listen(port, host, () => {
-  console.log(`Infinite Scroll demo: http://${host}:${port}${entryPath}`)
+  const listeningPort = server.address().port
+  console.log(`Infinite Scroll demo: http://${host}:${listeningPort}${entryPath}`)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
