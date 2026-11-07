@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { InfiniteScroll } from '@shelamkoff/infinite-scroll'
 
 assert.equal(typeof InfiniteScroll, 'function')
@@ -7,7 +8,7 @@ assert.equal(typeof globalThis.document, 'undefined')
 assert.throws(() => new InfiniteScroll(null, () => {}), TypeError)
 
 const manifest = JSON.parse(readFileSync(
-  new URL(import.meta.resolve('@shelamkoff/infinite-scroll/package.json')),
+  createRequire(import.meta.url).resolve('@shelamkoff/infinite-scroll/package.json'),
   'utf8',
 ))
 assert.equal(manifest.name, '@shelamkoff/infinite-scroll')
