@@ -452,3 +452,24 @@ test('supports a global observer polyfill when the container window has none', (
   controller.destroy()
   assert.equal(container.children.length, 0)
 })
+
+test('accepts a container created globally and adopted into another document', () => {
+  class OwnerElement extends FakeElement {}
+  class OwnerObserver extends FakeIntersectionObserver {}
+  const ownerDocument = {
+    defaultView: { HTMLElement: OwnerElement, IntersectionObserver: OwnerObserver },
+    createElement() {
+      const element = new OwnerElement()
+      element.ownerDocument = ownerDocument
+      return element
+    },
+  }
+  const container = new FakeElement()
+  container.ownerDocument = ownerDocument
+  const controller = new InfiniteScroll(container, () => {})
+
+  assert.equal(container.lastChild.ownerDocument, ownerDocument)
+  assert.ok(FakeIntersectionObserver.instances.at(-1) instanceof OwnerObserver)
+  controller.destroy()
+  assert.equal(container.children.length, 0)
+})

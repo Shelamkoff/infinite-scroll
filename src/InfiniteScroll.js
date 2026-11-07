@@ -44,7 +44,9 @@ export class InfiniteScroll {
   constructor(container, callback, options = {}) {
     const ownerDocument = container?.ownerDocument
     const view = ownerDocument?.defaultView ?? globalThis
-    if (typeof view.HTMLElement !== 'function' || !(container instanceof view.HTMLElement)) {
+    const isOwnerElement = typeof view.HTMLElement === 'function' && container instanceof view.HTMLElement
+    const isGlobalElement = typeof globalThis.HTMLElement === 'function' && container instanceof globalThis.HTMLElement
+    if (!isOwnerElement && !isGlobalElement) {
       throw new TypeError('InfiniteScroll container must be an HTMLElement')
     }
     if (typeof callback !== 'function') {

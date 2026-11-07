@@ -311,6 +311,32 @@ for (const name of names) {
       })
     })
 
+    test('accepts an HTMLElement adopted into a same-origin iframe and observes its current viewport', async () => {
+      await check(async page => {
+        await page.evaluate(async () => {
+          const frame = document.createElement('iframe')
+          frame.style.cssText = 'width:400px;height:240px;border:0'
+          const loaded = new Promise(resolve => { frame.onload = resolve })
+          frame.src = 'about:blank'
+          document.body.appendChild(frame)
+          await loaded
+          globalThis.frameWindow = frame.contentWindow
+          const feed = document.createElement('section')
+          frame.contentDocument.body.appendChild(feed)
+          addItem(feed, 1400)
+          globalThis.loads = 0
+          globalThis.controller = new InfiniteScroll(feed, () => { loads += 1; return false }, { threshold: 0 })
+          globalThis.sentinelDocumentMatches = feed.lastElementChild.ownerDocument === frame.contentDocument
+        })
+        await page.evaluate(() => nextFrames())
+        assert.equal(await page.evaluate(() => loads), 0)
+        assert.equal(await page.evaluate(() => sentinelDocumentMatches), true)
+        await page.evaluate(() => frameWindow.scrollTo(0, frameWindow.document.body.scrollHeight))
+        await page.waitForFunction(() => loads === 1)
+        await page.evaluate(() => controller.destroy())
+      })
+    })
+
     test('accepts finite fractional and large preloading distances', async () => {
       await check(async page => {
         const errors = await page.evaluate(() => {
