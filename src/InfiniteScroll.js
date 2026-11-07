@@ -21,6 +21,9 @@ export class InfiniteScroll {
   #paused = false
 
   /** @type {boolean} */
+  #resumePending = false
+
+  /** @type {boolean} */
   #destroyed = false
 
   /** @type {() => boolean | void | Promise<boolean | void>} */
@@ -39,7 +42,9 @@ export class InfiniteScroll {
    * }} [options]
    */
   constructor(container, callback, options = {}) {
-    if (typeof HTMLElement === 'undefined' || !(container instanceof HTMLElement)) {
+    const ownerDocument = container?.ownerDocument
+    const view = ownerDocument?.defaultView ?? globalThis
+    if (typeof view.HTMLElement !== 'function' || !(container instanceof view.HTMLElement)) {
       throw new TypeError('InfiniteScroll container must be an HTMLElement')
     }
     if (typeof callback !== 'function') {
@@ -48,10 +53,11 @@ export class InfiniteScroll {
     if (!options || typeof options !== 'object' || Array.isArray(options)) {
       throw new TypeError('InfiniteScroll options must be an object')
     }
-    if (typeof document === 'undefined') {
+    if (!ownerDocument) {
       throw new Error('InfiniteScroll requires a browser document')
     }
-    if (typeof IntersectionObserver !== 'function') {
+    const Observer = view.IntersectionObserver ?? globalThis.IntersectionObserver
+    if (typeof Observer !== 'function') {
       throw new Error('InfiniteScroll requires IntersectionObserver support')
     }
 
@@ -74,12 +80,11 @@ export class InfiniteScroll {
     this.#callback = callback
     this.#onError = onError
     this.#container = container
-    this.#sentinel = document.createElement('div')
+    this.#sentinel = ownerDocument.createElement('div')
     this.#sentinel.className = sentinel.trim()
     this.#sentinel.setAttribute('aria-hidden', 'true')
-    container.appendChild(this.#sentinel)
 
-    this.#observer = new IntersectionObserver(
+    this.#observer = new Observer(
       entries => {
         if (entries.some(entry => entry.isIntersecting)) {
           void this.#trigger()
@@ -87,7 +92,13 @@ export class InfiniteScroll {
       },
       { rootMargin: `0px 0px ${threshold}px 0px` },
     )
-    this.#observer.observe(this.#sentinel)
+    try {
+      container.appendChild(this.#sentinel)
+      this.#observer.observe(this.#sentinel)
+    } catch (error) {
+      this.destroy()
+      throw error
+    }
   }
 
   /**
@@ -115,8 +126,14 @@ export class InfiniteScroll {
 
     const wasPaused = this.#paused
     this.#paused = value
-    if (wasPaused && !value && !this.#inFlight) {
-      this.#refreshObserver()
+    if (value) {
+      this.#resumePending = false
+    } else if (wasPaused) {
+      if (this.#inFlight) {
+        this.#resumePending = true
+      } else {
+        this.#refreshObserver()
+      }
     }
   }
 
@@ -124,6 +141,7 @@ export class InfiniteScroll {
   destroy() {
     if (this.#destroyed) return
     this.#destroyed = true
+    this.#resumePending = false
     this.#observer.disconnect()
     this.#sentinel.remove()
   }
@@ -139,14 +157,25 @@ export class InfiniteScroll {
       }
     } catch (error) {
       if (this.#onError) {
-        this.#onError(error)
+        try {
+          Promise.resolve(this.#onError(error)).catch(handlerError => {
+            console.error('InfiniteScroll onError failed', handlerError)
+          })
+        } catch (handlerError) {
+          console.error('InfiniteScroll onError failed', handlerError)
+        }
       } else {
         console.error('InfiniteScroll callback failed', error)
       }
     } finally {
       this.#inFlight = false
-      if (!this.#destroyed && this.#container.lastElementChild !== this.#sentinel) {
+      const shouldResume = this.#resumePending
+      this.#resumePending = false
+      if (!this.#destroyed && this.#container.lastChild !== this.#sentinel) {
         this.#container.appendChild(this.#sentinel)
+      }
+      if (shouldResume && !this.#destroyed && !this.#paused) {
+        this.#refreshObserver()
       }
     }
   }
